@@ -1,0 +1,586 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Mag 趋势图表量化终端 v2</title>
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+<style>
+  :root {
+    --bg:      #0d1520;
+    --panel:   #111e30;
+    --border:  #1e3352;
+    --otc:     #38c8ff;
+    --blast:   #00e8b0;
+    --orange:  #ff9f1c;
+    --yellow:  #f5e642;
+    --red:     #ff3d5a;
+    --text:    #c8daf0;
+    --dim:     #4a6080;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    font-family: 'Rajdhani', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+    color: var(--text);
+    min-height: 100vh;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 20px 12px;
+    border-bottom: 1px solid var(--border);
+    flex-wrap: wrap;
+  }
+  .brand {
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    color: #fff;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+  .brand span { color: var(--otc); }
+  .date-range {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 5px 12px;
+    font-family: 'Share Tech Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 12px;
+    color: var(--otc);
+  }
+  .date-range input[type=date] {
+    background: transparent;
+    border: none;
+    color: var(--otc);
+    font-family: 'Share Tech Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 12px;
+    outline: none;
+    cursor: pointer;
+    width: 108px;
+    min-height: 28px;
+  }
+  .date-range input[type=date]::-webkit-calendar-picker-indicator {
+    filter: invert(0.6) sepia(1) saturate(3) hue-rotate(170deg);
+    cursor: pointer;
+  }
+  .date-sep { color: var(--dim); }
+  .asset-wrap {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 5px 12px;
+    min-width: 160px;
+    flex: 1;
+    min-height: 36px;
+  }
+  .asset-wrap select {
+    background: transparent;
+    border: none;
+    color: #fff;
+    font-family: 'Rajdhani', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-size: 14px;
+    font-weight: 600;
+    outline: none;
+    cursor: pointer;
+    width: 100%;
+    min-height: 26px;
+  }
+  .asset-wrap select option { background:#111e30; }
+  .asset-wrap select optgroup { background:#111e30; color:#ffffff; font-weight:700; }
+  .asset-wrap select, .asset-wrap select option, .asset-wrap select optgroup { color:#fff !important; }
+
+  .toggles { display:flex; align-items:center; gap:10px; margin-left:auto; flex-wrap: wrap; }
+  .zoomBtns { display:flex; gap:6px; margin-right:12px; flex-wrap: wrap; }
+  .zoomBtns button {
+    background:#111e30; border:1px solid #1e3352; color:#4a6080;
+    padding:5px 10px; border-radius:6px; font-size:11px; cursor:pointer;
+    font-family:'Share Tech Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+    transition:.2s; min-height: 32px; min-width: 44px;
+  }
+  .zoomBtns button:hover { border-color:#38c8ff; color:#38c8ff; }
+
+  .toggle-btn {
+    display:flex; align-items:center; gap:6px; padding:7px 14px; border-radius:22px;
+    border:1.5px solid #4a6080; background:transparent; font-size:14px; font-weight:700;
+    cursor:pointer; transition:.25s; min-height: 38px;
+  }
+  .toggle-btn .dot { width:9px; height:9px; border-radius:50%; background:#4a6080; }
+  .toggle-btn.on-otc { border-color:#38c8ff; color:#38c8ff; box-shadow:0 0 12px rgba(56,200,255,.2); }
+  .toggle-btn.on-otc .dot { background:#38c8ff; box-shadow:0 0 10px rgba(56,200,255,.7); }
+  .toggle-btn.on-blast { border-color:#00e8b0; color:#00e8b0; box-shadow:0 0 12px rgba(0,232,176,.2); }
+  .toggle-btn.on-blast .dot { background:#00e8b0; box-shadow:0 0 10px rgba(0,232,176,.7); }
+  .toggle-btn .check { font-size:15px; opacity:1; transition:.2s; }
+  #btnOtc:not(.on-otc) .check { opacity:0; }
+  #btnBlast:not(.on-blast) .check { opacity:0; }
+
+  .statsbar {
+    display: flex; gap: 0; padding: 0 20px; border-bottom: 1px solid var(--border);
+    overflow-x: auto; -webkit-overflow-scrolling: touch;
+  }
+  .stat { padding: 8px 16px 8px 0; margin-right: 16px; border-right: 1px solid var(--border); white-space: nowrap; }
+  .stat:last-child { border-right: none; }
+  .stat-label { font-size: 10px; color: var(--dim); letter-spacing: 1px; text-transform: uppercase; }
+  .stat-val { font-family: 'Share Tech Mono', ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 17px; font-weight: 700; margin-top: 1px; }
+  .c-otc { color: var(--otc); } .c-blast { color: var(--blast); } .c-in { color: #00e8b0; }
+  .c-out { color: var(--red); } .c-near { color: var(--orange); }
+
+  #chart { width: 100%; height: calc(100vh - 168px); min-height: 420px; }
+  #loading {
+    position: fixed; inset: 0; background: var(--bg); display: flex; flex-direction: column;
+    align-items: center; justify-content: center; z-index: 999; gap: 16px;
+  }
+  .spinner { width: 42px; height: 42px; border: 3px solid var(--border); border-top-color: var(--otc); border-radius: 50%; animation: spin .8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  #loading p { font-family: 'Share Tech Mono', ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--otc); font-size: 12px; letter-spacing: 2px; }
+  #err {
+    display: none; background: #2a0a10; border: 1px solid var(--red); border-radius: 8px;
+    padding: 10px 16px; margin: 12px 16px; color: var(--red); font-size: 13px;
+  }
+
+  .phaseLegend { display:flex; justify-content:flex-end; gap:28px; padding:8px 20px; color:#9ca9bc; font-size:14px; font-weight:600; flex-wrap: wrap; }
+  .legendItem { display:flex; align-items:center; gap:8px; }
+  .solidLine { width:42px; height:3.5px; background:#fff; border-radius:10px; }
+  .dashLine { width:42px; border-top:3.5px dashed #fff; }
+
+  ::-webkit-scrollbar { width: 5px; height: 5px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  .zoomBtns button:active { transform:scale(.96); border-color:#38c8ff; color:#38c8ff; }
+  .toggle-btn:active { transform:scale(.97); }
+
+  /* iPhone 手机端优化 */
+  @media (max-width: 480px) {
+    .header { padding: 10px 14px 8px; gap: 8px; }
+    .brand { font-size: 17px; letter-spacing: 1px; width: 100%; }
+    .date-range { width: 100%; padding: 4px 10px; font-size: 11px; }
+    .date-range input[type=date] { width: 100px; font-size: 11px; }
+    .asset-wrap { width: 100%; min-width: 100%; padding: 4px 10px; }
+    .asset-wrap select { font-size: 13px; }
+    .toggles { width: 100%; margin-left: 0; gap: 8px; justify-content: space-between; }
+    .toggle-btn { flex: 1; min-height: 36px; padding: 6px 10px; font-size: 13px; justify-content: center; }
+    .zoomBtns { width: 100%; margin-right: 0; justify-content: center; gap: 5px; }
+    .zoomBtns button { padding: 4px 8px; font-size: 10px; min-height: 30px; min-width: 38px; }
+    .statsbar { padding: 0 12px; }
+    .stat { padding: 6px 10px 6px 0; margin-right: 10px; }
+    .stat-label { font-size: 8.5px; letter-spacing: 0.8px; }
+    .stat-val { font-size: 15px; }
+    #chart { height: calc(100vh - 195px); min-height: 360px; }
+    .phaseLegend { padding: 5px 12px; font-size: 12px; gap: 14px; justify-content: center; }
+    .legendItem { gap: 6px; }
+    .solidLine, .dashLine { width: 36px; }
+  }
+
+  @supports (padding: env(safe-area-inset-top)) {
+    body { padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom); }
+    .header { padding-top: calc(10px + env(safe-area-inset-top)); }
+  }
+</style>
+</head>
+<body>
+
+<div id="loading"><div class="spinner"></div><p>LOADING DATA...</p></div>
+<div id="err"></div>
+
+<div class="header">
+  <div class="brand">MAG <span>趋势</span> 终端</div>
+  <div class="date-range">
+    <input type="date" id="dateFrom" value="2020-09-01">
+    <span class="date-sep">→</span>
+    <input type="date" id="dateTo" value="2026-12-31">
+  </div>
+  <div class="asset-wrap">
+    <select id="assetSel"></select>
+  </div>
+  <div class="toggles">
+    <button class="toggle-btn on-otc" id="btnOtc" onclick="toggle('otc')">
+      <span class="check">✓</span><span class="dot"></span>场外指数
+    </button>
+    <button class="toggle-btn on-blast" id="btnBlast" onclick="toggle('blast')">
+      <span class="check">✓</span><span class="dot"></span>爆破指数
+    </button>
+    <div style="flex:1"></div>
+    <div class="zoomBtns">
+      <button onclick="zoomAll()">ALL</button>
+      <button onclick="zoomDays(365)">1Y</button>
+      <button onclick="zoomDays(90)">90D</button>
+      <button onclick="zoomDays(30)">30D</button>
+      <button onclick="zoomDays(7)">7D</button>
+    </div>
+  </div>
+</div>
+
+<div class="statsbar">
+  <div class="stat"><div class="stat-label">最新场外</div><div class="stat-val c-otc" id="s-otc">--</div></div>
+  <div class="stat"><div class="stat-label">最新爆破</div><div class="stat-val c-blast" id="s-blast">--</div></div>
+  <div class="stat"><div class="stat-label">当前状态</div><div class="stat-val" id="s-phase">--</div></div>
+  <div class="stat"><div class="stat-label">持续天数</div><div class="stat-val" id="s-day">--</div></div>
+  <div class="stat"><div class="stat-label">逼近警告</div><div class="stat-val" id="s-near">--</div></div>
+  <div class="stat"><div class="stat-label">数据点数</div><div class="stat-val" id="s-cnt" style="color:#fff">--</div></div>
+  <div class="stat"><div class="stat-label">周期质量</div><div class="stat-val" id="s-quality">--</div></div>
+</div>
+
+<div class="phaseLegend">
+  <div class="legendItem"><div class="solidLine"></div>实线/实心点：进场期</div>
+  <div class="legendItem"><div class="dashLine"></div>虚线/空心点：退场期</div>
+</div>
+
+<div id="chart"></div>
+
+<script>
+/* ==================== 完整 JavaScript（已适配手机） ==================== */
+const SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vR86SHJh-fNfCDEGfYZAGd_ZGnpnNzy60MQdLBKH5xc1poZjyh9rMYdzSCbfhLNM4rgLR2wOvfGPOoQ/pub?output=csv";
+
+const C = { bg: "#0d1520", otc: "#38c8ff", blast: "#00e8b0", orange: "#ff9f1c", yellow: "#f5e642", red: "#ff3d5a", dim: "#4a6080" };
+
+let allData = [], dataMap = {}, chart = null, showOtc = true, showBlast = true;
+
+function parseCSV(text) {
+  const rows = [];
+  const lines = text.trim().split('\n');
+  const headers = lines[0].match(/(".*?"|[^",]+)(?=\s*,|\s*$)/g).map(x => x.replace(/"/g,'').trim().toLowerCase());
+  for (let i = 1; i < lines.length; i++) {
+    const cols = lines[i].match(/(".*?"|[^",]+)(?=\s*,|\s*$)/g)?.map(x => x.replace(/"/g,''));
+    if (!cols) continue;
+    const row = {};
+    headers.forEach((h, j) => row[h] = cols[j] || "");
+    rows.push(row);
+  }
+  return rows.filter(r => r.date && r.symbol);
+}
+
+async function loadSheet() {
+  const urls = [SHEET_URL, `https://corsproxy.io/?${encodeURIComponent(SHEET_URL)}`, `https://api.allorigins.win/raw?url=${encodeURIComponent(SHEET_URL)}`];
+  for (const u of urls) {
+    try {
+      const r = await fetch(u, { cache: "no-cache" });
+      if (r.ok) { allData = parseCSV(await r.text()); return; }
+    } catch (_) {}
+  }
+  throw new Error("无法读取 Google Sheet，已加载演示数据。");
+}
+
+function buildSelect() {
+  const ORDER = ["CRYPTO","STOCK","COMMODITY"];
+  const groups = {};
+  allData.forEach(r => {
+    const g = r.group || "OTHER";
+    if (!groups[g]) groups[g] = new Set();
+    groups[g].add(r.symbol);
+  });
+  const sel = document.getElementById("assetSel");
+  sel.innerHTML = "";
+  [...ORDER, ...Object.keys(groups).filter(g => !ORDER.includes(g))].forEach(g => {
+    if (!groups[g]) return;
+    const og = document.createElement("optgroup"); og.label = g;
+    [...groups[g]].sort().forEach(s => {
+      const o = document.createElement("option"); o.value = o.textContent = s; og.appendChild(o);
+    });
+    sel.appendChild(og);
+  });
+  if ([...sel.options].some(o => o.value === "BTC")) sel.value = "BTC";
+}
+
+function getRows() {
+  const sym = document.getElementById("assetSel").value;
+  const from = document.getElementById("dateFrom").value;
+  const to = document.getElementById("dateTo").value;
+  return (dataMap[sym] || []).filter(r => (!from || r.date >= from) && (!to || r.date <= to)).sort((a,b) => a.date.localeCompare(b.date));
+}
+
+function fmtXLabel(dateStr) { return dateStr ? dateStr.slice(2) : dateStr; }
+
+function refLineSeries() {
+  return [
+    { id:"ref_otc", type:"scatter", yAxisIndex:0, symbol:"none", silent:true, data:[],
+      markLine:{ silent:true, symbol:["none","none"], animation:false, label:{show:false},
+        data:[{yAxis:1000, lineStyle:{color:C.orange, type:"dashed", width:1, opacity:.75}}, {yAxis:0, lineStyle:{color:C.yellow, type:"dashed", width:1, opacity:.75}}] } },
+    { id:"ref_blast", type:"scatter", yAxisIndex:1, symbol:"none", silent:true, data:[],
+      markLine:{ silent:true, symbol:["none","none"], animation:false, label:{show:false},
+        data:[{yAxis:200, lineStyle:{color:C.orange, type:"dashed", width:1, opacity:.75}}, {yAxis:0, lineStyle:{color:C.yellow, type:"dashed", width:1, opacity:.75}}] } }
+  ];
+}
+
+function buildDataSeries(rows) {
+  const phase = rows.map(r => (r.phase||"").toUpperCase());
+  const near = rows.map(r => r.near==="TRUE"||r.near==="true"||r.near==="1");
+  const otcV = rows.map(r => r.otc !== "" ? +r.otc : null);
+  const blstV = rows.map(r => r.blast !== "" ? +r.blast : null);
+  const series = [];
+
+  function segs(vals, color, yIdx, pfx) {
+    if (!vals.some(v => v !== null)) return;
+    const solidData = [], dashData = [];
+    for (let i = 0; i < vals.length; i++) { solidData.push(null); dashData.push(null); }
+    for (let i = 1; i < vals.length; i++) {
+      if (vals[i] === null || vals[i-1] === null) continue;
+      const isDash = phase[i] === "OUT" || phase[i-1] === "OUT";
+      if (isDash) { dashData[i-1] = [i-1, vals[i-1]]; dashData[i] = [i, vals[i]]; }
+      else { solidData[i-1] = [i-1, vals[i-1]]; solidData[i] = [i, vals[i]]; }
+    }
+    if (solidData.some(v => v !== null)) {
+      series.push({ id: `${pfx}_solid`, type: "line", yAxisIndex: yIdx, silent: true, symbol: "none", z:1, zlevel:1,
+        connectNulls:false, lineStyle:{width:3, color, type:"solid"}, data: solidData, animation:false, progressive:2000, large:true, largeThreshold:200 });
+    }
+    if (dashData.some(v => v !== null)) {
+      series.push({ id: `${pfx}_dash`, type: "line", yAxisIndex: yIdx, silent: true, symbol: "none", z:1, zlevel:1,
+        connectNulls:false, lineStyle:{width:3, color, type:"dashed"}, data: dashData, animation:false, progressive:2000, large:true, largeThreshold:200 });
+    }
+  }
+
+  function pts(vals, color, yIdx, pfx) {
+    if (!vals.some(v => v !== null)) return;
+    series.push({
+      id: `${pfx}_P`, type: "scatter", yAxisIndex: yIdx, z:999, zlevel:999, animation:false, progressive:2000, large:true, largeThreshold:200,
+      data: vals.map((v,i) => {
+        if (v === null) return null;
+        const isNear = near[i];
+        return {
+          value:[i,v], symbolSize: isNear ? 20 : 14, symbol: isNear ? "diamond" : "circle",
+          itemStyle: {
+            color: phase[i]==="OUT" ? "rgba(13,21,32,1)" : `${color}`,
+            opacity:1, borderColor: isNear ? C.orange : color, borderWidth: isNear ? 4 : 3,
+            shadowBlur: isNear ? 8 : 0, shadowColor: isNear ? C.orange : "transparent"
+          },
+          emphasis: { scale:false, itemStyle:{opacity:1} }
+        };
+      }).filter(Boolean)
+    });
+  }
+
+  if (showOtc) { segs(otcV, C.otc, 0, "otc"); pts(otcV, C.otc, 0, "otc"); }
+  if (showBlast) { segs(blstV, C.blast, 1, "blt"); pts(blstV, C.blast, 1, "blt"); }
+  if (series.length === 0) series.push({id:"empty", type:"line", silent:true, symbol:"none", data:[]});
+  return { otcV, blstV, phase, near, series };
+}
+
+function calcAllCycles(rows) {
+  const cycles = [];
+  if (!rows.length) return cycles;
+  const ph = r => (r.phase||"").toUpperCase();
+  const otc = r => +r.otc || 0;
+  const bst = r => r.blast !== "" ? +r.blast : null;
+  const starts = [];
+  rows.forEach((r,i) => { if (+r.day === 1) starts.push(i); });
+  for (let s = 0; s < starts.length; s++) {
+    const startIdx = starts[s];
+    const endIdx = (s+1 < starts.length) ? starts[s+1]-1 : rows.length-1;
+    const cycleRows = rows.slice(startIdx, endIdx+1);
+    const phase = ph(cycleRows[0]);
+    const result = analyzeCycle(cycleRows, phase, rows, startIdx);
+    cycles.push({ startIdx, endIdx, phase, grade: result.grade, reason: result.reason });
+  }
+  return cycles;
+
+  function analyzeCycle(cycleRows, phase, allRows, startIdx) {
+    const day1 = cycleRows[0];
+    if (phase === "IN") {
+      const otc0 = otc(day1); const blast0 = bst(day1) ?? 0;
+      if (blast0 > 200) return { grade:"🔴劣质进场", reason:"先爆破后进场" };
+      const weekRows = cycleRows.filter(r => +r.day >=1 && +r.day <=7);
+      if (weekRows.length >=3) {
+        const over200 = weekRows.some(r => (bst(r)??0) > 200);
+        if (!over200) {
+          const avg = weekRows.reduce((s,r)=>s+(bst(r)??0),0)/weekRows.length;
+          if (avg <= blast0) return { grade:"🔴劣质进场", reason:"一周未破200且动能不增" };
+        }
+      }
+      const nodes = [otc0];
+      for (let i=1; i<cycleRows.length; i++) {
+        const prev = bst(cycleRows[i-1])??0; const curr = bst(cycleRows[i])??0;
+        if (prev > 200 && curr <= 200) nodes.push(otc(cycleRows[i]));
+      }
+      if (nodes.length >=2) {
+        let up = 0; for (let i=1; i<nodes.length; i++) if (nodes[i] > nodes[i-1]) up++;
+        const total = nodes.length-1;
+        if (up === total) return { grade:"🟢优质进场", reason:`节点持续抬升 ${up}/${total}` };
+        if (up === 0) return { grade:"🔴劣质进场", reason:"拉盘动力持续减弱" };
+        return { grade:"🟡普通进场", reason:`节点涨跌混合 ${up}/${total}` };
+      }
+      const isCompleted = (startIdx + cycleRows.length) < allRows.length;
+      return { grade: isCompleted ? "🟡普通进场" : "🟡普通", reason: isCompleted ? "节点不足判断" : "进行中待观察" };
+    }
+    if (phase === "OUT") {
+      const otc0 = otc(day1);
+      let nodeOtc = null;
+      for (let i = startIdx-1; i>0; i--) {
+        const prev = bst(allRows[i-1])??0; const curr = bst(allRows[i])??0;
+        if (prev < 0 && curr > 0) { nodeOtc = otc(allRows[i]); break; }
+      }
+      if (nodeOtc !== null) {
+        if (otc0 < nodeOtc) return { grade:"🟢优质退场", reason:`场外下降 ${nodeOtc}→${otc0}` };
+        return { grade:"🔴劣质退场", reason:`场外不降反升 ${nodeOtc}→${otc0}` };
+      }
+      const isCompleted = (startIdx + cycleRows.length) < allRows.length;
+      return { grade: isCompleted ? "🟡普通退场" : "🟡普通", reason: isCompleted ? "无法找到负→正节点" : "进行中待观察" };
+    }
+    return { grade:"🟡普通", reason:"未知阶段" };
+  }
+}
+
+function calcQuality(rows){ const cycles = calcAllCycles(rows); return cycles.length ? cycles[cycles.length-1] : {grade:"🟡普通", reason:""}; }
+
+function render() {
+  const rows = getRows();
+  const otcVals = rows.map(r => r.otc!=="" ? +r.otc : null).filter(v=>v!==null);
+  const blastVals = rows.map(r => r.blast!=="" ? +r.blast : null).filter(v=>v!==null);
+  const allInOtcScale = [...otcVals, ...blastVals.map(v=>v*5)];
+  const dataMin = allInOtcScale.length ? Math.min(...allInOtcScale) : -350;
+  const dataMax = allInOtcScale.length ? Math.max(...allInOtcScale) : 2150;
+  const leftMin = Math.min(-350, Math.floor(dataMin/500)*500 - 500);
+  const leftMax = Math.max(2150, Math.ceil(dataMax/500)*500 + 500);
+  const rightMin = leftMin/5, rightMax = leftMax/5;
+
+  updateStats(rows);
+  if (!rows.length) { chart.clear(); return; }
+
+  const dates = rows.map(r => r.date);
+  const { otcV, blstV, phase, near, series } = buildDataSeries(rows);
+  const cycles = calcAllCycles(rows);
+  let qualityMark = [];
+
+  cycles.forEach((cyc, idx) => {
+    let txt, bgColor, fontColor;
+    if (cyc.grade.includes("优质")) { txt="GOOD"; bgColor="#22c55e"; fontColor="#ffffff"; }
+    else if (cyc.grade.includes("普通")) { txt="NORMAL"; bgColor="#eab308"; fontColor="#1a1a1a"; }
+    else { txt="BAD"; bgColor="#ef4444"; fontColor="#ffffff"; }
+    const i = cyc.startIdx;
+    const isIn = cyc.phase === "IN";
+    const yPos = isIn ? leftMax - 100 : leftMin + 100;
+    const yDataPoint = rows[i].otc !== "" ? +rows[i].otc : yPos;
+    qualityMark.push({
+      id: "qmark_"+idx, type:"scatter", yAxisIndex:0, z:9999, symbol:"rect", symbolSize:[54,20], data:[[i,yPos]],
+      label: { show:true, formatter:txt, color:fontColor, fontSize:11, fontWeight:"bold", fontFamily:"'Share Tech Mono', monospace" },
+      itemStyle: { color:bgColor, borderColor:bgColor, borderWidth:1, shadowBlur:8, shadowColor:bgColor+"aa" },
+      markLine: { silent:true, symbol:["none","circle"], symbolSize:6, animation:false,
+        data:[[{coord:[i,yPos], lineStyle:{color:bgColor, type:"dashed", width:1, opacity:0.5}}, {coord:[i,yDataPoint]}]], label:{show:false} },
+      tooltip: { formatter: () => `<b style="color:${bgColor}">${cyc.grade}</b><br/><span style="color:#888;font-size:11px">${rows[cyc.startIdx]?.date} ~ ${rows[cyc.endIdx]?.date}</span><br/><span style="color:#aaa">${cyc.reason}</span>` }
+    });
+  });
+
+  function fmt(params) {
+    if (!params.length) return "";
+    const axisDate = params[0].axisValue;
+    const i = dates.findIndex(d => d === axisDate);
+    if (i === -1) return "";
+    const currentCycle = cycles.find(c => i >= c.startIdx && i <= c.endIdx);
+    const q = currentCycle ? {grade:currentCycle.grade, reason:currentCycle.reason} : {grade:"🟡普通", reason:""};
+    const ph = phase[i]==="IN" ? `<span style="color:${C.blast};font-weight:700">进场期</span>` : `<span style="color:${C.red};font-weight:700">退场期</span>`;
+    const nr = near[i] ? `<span style="color:${C.orange}">⚠逼近</span>` : `<span style="color:${C.dim}">否</span>`;
+    return `<div style="line-height:1.9;min-width:180px;font-family:'Rajdhani'">
+      <div style="font-size:11px;color:${C.dim};letter-spacing:2px;margin-bottom:6px">${dates[i]}</div>
+      <div>🔷 场外指数: <b style="color:${C.otc}">${otcV[i]??"N/A"}</b></div>
+      <div>🟩 爆破指数: <b style="color:${C.blast}">${blstV[i]??"N/A"}</b></div>
+      <div>🔄 状态: ${ph} 第 ${rows[i].day||"?"} ${document.getElementById("assetSel").value==="地产"&&phase[i]==="IN"?"月":"天"}</div>
+      <div>🚨逼近: ${nr}</div>
+      <div>⭐ ${q.grade}</div>
+      <div style="color:#4a6080;font-size:11px">${q.reason}</div>
+    </div>`;
+  }
+
+  chart.setOption({
+    backgroundColor: C.bg, animation: false,
+    tooltip: { trigger:"axis", backgroundColor:"#111e30", borderColor:C.otc, borderWidth:1, textStyle:{color:"#fff"}, axisPointer:{type:"line",snap:true}, formatter:fmt },
+    grid: { left:70, right:80, top:45, bottom:130 },
+    xAxis: { type:"category", data:dates, boundaryGap:false,
+      axisLabel:{ color:C.dim, rotate:42, fontSize:10, fontFamily:"'Share Tech Mono',monospace", formatter:fmtXLabel },
+      axisLine:{lineStyle:{color:"#1e3352"}}, splitLine:{show:true, lineStyle:{color:"#1a2e48", type:"dashed"}} },
+    yAxis: [
+      { name:"场外指数", nameTextStyle:{color:C.otc, fontSize:11, padding:[0,0,0,6]}, min:leftMin, max:leftMax, interval:500,
+        axisLabel:{color:C.otc, fontFamily:"'Share Tech Mono',monospace", fontSize:10}, axisLine:{lineStyle:{color:"#1e3352"}}, splitLine:{lineStyle:{color:"#1a2e48"}} },
+      { name:"爆破指数", nameTextStyle:{color:C.blast, fontSize:11, padding:[0,6,0,0]}, min:rightMin, max:rightMax, interval:100,
+        axisLabel:{color:C.blast, fontFamily:"'Share Tech Mono',monospace", fontSize:10}, axisLine:{lineStyle:{color:"#1e3352"}}, splitLine:{show:false} }
+    ],
+    dataZoom: [
+      { type:'inside', xAxisIndex:0, zoomOnMouseWheel:true, moveOnMouseMove:true, throttle:50, zoomLock:false },
+      { type:'slider', xAxisIndex:0, height:16, bottom:32, start:0, end:100, realtime:true,
+        borderColor:"transparent", backgroundColor:"rgba(15,26,46,0.4)", fillerColor:"rgba(56,200,255,0.12)",
+        handleStyle:{ color:"#38c8ff", borderColor:"#5ad1ff", borderWidth:1, shadowBlur:6, shadowColor:"rgba(56,200,255,0.6)" },
+        showDetail:true, labelFormatter:(v,vs)=> (typeof vs==='string'&&vs.length>=10)?vs.slice(2):vs||'' }
+    ],
+    series: [...refLineSeries(), ...series, ...qualityMark]
+  }, true);
+}
+
+function updateStats(rows) {
+  const ids = ["s-otc","s-blast","s-phase","s-day","s-near","s-cnt","s-quality"];
+  if (!rows.length) { ids.forEach(id => document.getElementById(id).textContent="--"); return; }
+  const l = rows[rows.length-1];
+  document.getElementById("s-otc").textContent = l.otc || "--";
+  document.getElementById("s-blast").textContent = l.blast !== "" ? l.blast : "N/A";
+  const pe = document.getElementById("s-phase");
+  const isIn = String(l.phase).toUpperCase().includes("IN");
+  pe.textContent = isIn ? "进场期" : "退场期";
+  pe.className = "stat-val " + (isIn ? "c-in" : "c-out");
+  const sym = document.getElementById("assetSel").value;
+  document.getElementById("s-day").textContent = (sym==="地产" && isIn) ? (l.day||"--")+" 月" : (l.day||"--")+" 天";
+  const isNear = l.near==="TRUE"||l.near==="true"||l.near==="1";
+  const ne = document.getElementById("s-near");
+  ne.textContent = isNear ? "⚠ 逼近" : "正常";
+  ne.className = "stat-val " + (isNear ? "c-near" : "");
+  document.getElementById("s-cnt").textContent = rows.length + " 天";
+  const q = calcQuality(rows);
+  document.getElementById("s-quality").innerHTML = q.grade;
+}
+
+function toggle(which) {
+  if (which === "otc") { showOtc = !showOtc; document.getElementById("btnOtc").classList.toggle("on-otc", showOtc); }
+  else { showBlast = !showBlast; document.getElementById("btnBlast").classList.toggle("on-blast", showBlast); }
+  render();
+}
+
+const FALLBACK_CSV = `date,symbol,group,otc,blast,phase,day,near
+2026-05-19,BTC,CRYPTO,995,-21,OUT,1,FALSE
+2026-05-19,ETH,CRYPTO,866,-71,OUT,7,FALSE
+2026-05-19,BNB,CRYPTO,1108,81,OUT,2,FALSE`;
+
+async function init() {
+  chart = echarts.init(document.getElementById("chart"), null, { renderer:"canvas" });
+  window.addEventListener("resize", () => chart && chart.resize());
+  window.addEventListener("orientationchange", () => setTimeout(() => chart && chart.resize(), 250));
+
+  // 手机双击重置缩放
+  let lastTap = 0;
+  document.getElementById("chart").addEventListener("touchend", function(e){
+    const now = new Date().getTime();
+    if (now - lastTap < 300 && now - lastTap > 0) chart.dispatchAction({type:"dataZoom", start:0, end:100});
+    lastTap = now;
+  });
+
+  try { await loadSheet(); }
+  catch(e) {
+    document.getElementById("err").style.display = "block";
+    document.getElementById("err").textContent = "⚠ " + e.message;
+    allData = parseCSV(FALLBACK_CSV);
+  }
+
+  allData.forEach(r => { if(!dataMap[r.symbol]) dataMap[r.symbol]=[]; dataMap[r.symbol].push(r); });
+  buildSelect();
+  render();
+  document.getElementById("loading").style.display = "none";
+
+  document.getElementById("dateFrom").addEventListener("change", render);
+  document.getElementById("dateTo").addEventListener("change", render);
+  document.getElementById("assetSel").addEventListener("change", render);
+}
+
+function zoomAll(){ chart.dispatchAction({type:'dataZoom', start:0, end:100}); }
+function zoomDays(days){
+  const rows = getRows(); if(!rows.length) return;
+  const endDate = rows[rows.length-1].date;
+  const startDate = new Date(endDate); startDate.setDate(startDate.getDate()-days);
+  const start = new Date(startDate.getTime() - startDate.getTimezoneOffset()*60000).toISOString().slice(0,10);
+  chart.dispatchAction({type:'dataZoom', startValue:start, endValue:endDate});
+}
+
+init();
+</script>
+</body>
+</html>
