@@ -1,0 +1,1753 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mag 趋势图表量化终端 v2</title>
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+<style>
+  :root {
+    --bg:      #0d1520;
+    --panel:   #111e30;
+    --border:  #1e3352;
+    --otc:     #38c8ff;
+    --blast:   #00e8b0;
+    --orange:  #ff9f1c;
+    --yellow:  #f5e642;
+    --red:     #ff3d5a;
+    --text:    #c8daf0;
+    --dim:     #4a6080;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    font-family: 'Rajdhani', sans-serif;
+    color: var(--text);
+    min-height: 100vh;
+  }
+  .header {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 18px 28px 14px;
+    border-bottom: 1px solid var(--border);
+    flex-wrap: wrap;
+  }
+  .brand {
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    color: #fff;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+  .brand span { color: var(--otc); }
+  .date-range {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 6px 14px;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 13px;
+    color: var(--otc);
+  }
+  .date-range input[type=date] {
+    background: transparent;
+    border: none;
+    color: var(--otc);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 13px;
+    outline: none;
+    cursor: pointer;
+    width: 120px;
+  }
+  .date-range input[type=date]::-webkit-calendar-picker-indicator {
+    filter: invert(0.6) sepia(1) saturate(3) hue-rotate(170deg);
+    cursor: pointer;
+  }
+  .date-sep { color: var(--dim); }
+  .asset-wrap {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 6px 14px;
+    min-width: 180px;
+  }
+  .asset-wrap select {
+    background: transparent;
+    border: none;
+    color: #fff;
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 15px;
+    font-weight: 600;
+    outline: none;
+    cursor: pointer;
+    width: 100%;
+  }
+.asset-wrap select option{
+    background:#111e30;
+}
+
+.asset-wrap select optgroup{
+    background:#111e30;
+    color:#ffffff;
+    font-weight:700;
+}
+.asset-wrap select,
+.asset-wrap select option,
+.asset-wrap select optgroup{
+color:#fff !important;
+}
+.toggles{
+display:flex;
+align-items:center;
+gap:12px;
+margin-left:auto;
+}
+
+.zoomBtns{
+display:flex;
+gap:8px;
+margin-right:18px;
+}
+
+.zoomBtns button{
+
+background:#111e30;
+border:1px solid #1e3352;
+color:#4a6080;
+
+padding:6px 12px;
+
+border-radius:6px;
+
+font-size:12px;
+
+cursor:pointer;
+
+font-family:'Share Tech Mono';
+
+transition:.2s;
+
+}
+
+.zoomBtns button:hover{
+
+border-color:#38c8ff;
+color:#38c8ff;
+
+}
+
+.toggle-btn{
+
+display:flex;
+align-items:center;
+gap:8px;
+
+padding:8px 18px;
+
+border-radius:22px;
+
+border:1.5px solid #4a6080;
+
+background:transparent;
+
+font-size:15px;
+
+font-weight:700;
+
+cursor:pointer;
+
+transition:.25s;
+
+}
+
+.toggle-btn .dot{
+
+width:10px;
+height:10px;
+
+border-radius:50%;
+
+background:#4a6080;
+
+}
+
+.toggle-btn.on-otc{
+
+border-color:#38c8ff;
+color:#38c8ff;
+
+box-shadow:
+0 0 12px rgba(56,200,255,.2);
+
+}
+
+.toggle-btn.on-otc .dot{
+
+background:#38c8ff;
+
+box-shadow:
+0 0 10px rgba(56,200,255,.7);
+
+}
+
+
+.toggle-btn.on-blast{
+
+border-color:#00e8b0;
+color:#00e8b0;
+
+box-shadow:
+0 0 12px rgba(0,232,176,.2);
+
+}
+
+.toggle-btn.on-blast .dot{
+
+background:#00e8b0;
+
+box-shadow:
+0 0 10px rgba(0,232,176,.7);
+
+}
+
+.toggle-btn .check{
+
+font-size:16px;
+
+opacity:1;
+
+transition:.2s;
+
+}
+
+#btnOtc:not(.on-otc) .check{
+
+opacity:0;
+
+}
+
+#btnBlast:not(.on-blast) .check{
+
+opacity:0;
+
+}   .statsbar {
+    display: flex;
+    gap: 0;
+    padding: 0 28px;
+    border-bottom: 1px solid var(--border);
+    overflow-x: auto;
+  }
+  .stat {
+    padding: 10px 22px 10px 0;
+    margin-right: 22px;
+    border-right: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  .stat:last-child { border-right: none; }
+  .stat-label { font-size: 11px; color: var(--dim); letter-spacing: 1.5px; text-transform: uppercase; }
+  .stat-val { font-family: 'Share Tech Mono', monospace; font-size: 20px; font-weight: 700; margin-top: 2px; }
+  .c-otc   { color: var(--otc);    }
+  .c-blast { color: var(--blast);  }
+  .c-in    { color: #00e8b0;       }
+  .c-out   { color: var(--red);    }
+  .c-near  { color: var(--orange); }
+  #chart { width: 100%; height: calc(100vh - 160px); min-height: 520px; }
+  #loading {
+    position: fixed; inset: 0; background: var(--bg);
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    z-index: 999; gap: 18px;
+  }
+  .spinner {
+    width: 48px; height: 48px;
+    border: 3px solid var(--border);
+    border-top-color: var(--otc);
+    border-radius: 50%;
+    animation: spin .8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  #loading p { font-family: 'Share Tech Mono', monospace; color: var(--otc); font-size: 13px; letter-spacing: 2px; }
+  #err {
+    display: none;
+    background: #2a0a10; border: 1px solid var(--red);
+    border-radius: 8px; padding: 12px 20px;
+    margin: 16px 28px; color: var(--red); font-size: 14px;
+  }/* 新增这里 */
+
+.phaseLegend{
+
+display:flex;
+
+justify-content:flex-end;
+
+gap:40px;
+
+padding:12px 60px;
+
+color:#9ca9bc;
+
+font-size:16px;
+
+font-weight:600;
+
+}
+
+.legendItem{
+
+display:flex;
+
+align-items:center;
+
+gap:10px;
+
+}
+
+.solidLine{
+
+width:48px;
+
+height:4px;
+
+background:#fff;
+
+border-radius:10px;
+
+}
+
+.dashLine{
+
+width:48px;
+
+border-top:4px dashed #fff;
+
+}
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+.zoomBtns button:active{
+
+transform:scale(.96);
+
+border-color:#38c8ff;
+
+color:#38c8ff;
+
+}
+
+.toggle-btn:active{
+
+transform:scale(.97);
+
+}
+</style>
+</head>
+<body>
+
+<div id="loading"><div class="spinner"></div><p>LOADING DATA...</p></div>
+<div id="err"></div>
+
+<div class="header">
+  <div class="brand">MAG <span>趋势</span> 终端</div>
+  <div class="date-range">
+    <input type="date" id="dateFrom" value="2020-09-01">
+    <span class="date-sep">→</span>
+    <input type="date" id="dateTo"   value="2026-12-31">
+  </div>
+  <div class="asset-wrap">
+    <select id="assetSel"></select>
+  </div>
+<div class="toggles">
+
+<button
+class="toggle-btn on-otc"
+id="btnOtc"
+onclick="toggle('otc')">
+
+<span class="check">✓</span>
+<span class="dot"></span>
+场外指数
+
+</button>
+
+
+<button
+class="toggle-btn on-blast"
+id="btnBlast"
+onclick="toggle('blast')">
+
+<span class="check">✓</span>
+<span class="dot"></span>
+
+爆破指数
+
+</button>
+
+<div style="flex:1"></div>
+
+<div class="zoomBtns">
+
+<button onclick="zoomAll()">ALL</button>
+<button onclick="zoomDays(365)">1Y</button>
+<button onclick="zoomDays(90)">90D</button>
+<button onclick="zoomDays(30)">30D</button>
+<button onclick="zoomDays(7)">7D</button>
+</div>
+
+</div></div>
+
+<div class="statsbar">
+  <div class="stat"><div class="stat-label">最新场外</div><div class="stat-val c-otc"   id="s-otc">--</div></div>
+  <div class="stat"><div class="stat-label">最新爆破</div><div class="stat-val c-blast" id="s-blast">--</div></div>
+  <div class="stat"><div class="stat-label">当前状态</div><div class="stat-val"         id="s-phase">--</div></div>
+  <div class="stat"><div class="stat-label">持续天数</div><div class="stat-val"         id="s-day">--</div></div>
+  <div class="stat"><div class="stat-label">逼近警告</div><div class="stat-val"         id="s-near">--</div></div>
+  <div class="stat"><div class="stat-label">数据点数</div><div class="stat-val"         id="s-cnt" style="color:#fff">--</div></div>
+<div class="stat">
+    <div class="stat-label">周期质量</div>
+    <div class="stat-val" id="s-quality">--</div>
+</div>
+
+</div>
+
+<div class="phaseLegend">
+
+<div class="legendItem">
+<div class="solidLine"></div>
+实线/实心点：进场期
+</div>
+
+<div class="legendItem">
+<div class="dashLine"></div>
+虚线/空心点：退场期
+</div>
+
+</div>
+
+<div id="chart"></div>
+
+<script>
+/* ═══════════════════════════════════════════════
+   CONFIG
+═══════════════════════════════════════════════ */
+const SHEET_URL =
+  "https://docs.google.com/spreadsheets/d/e/2PACX-1vR86SHJh-fNfCDEGfYZAGd_ZGnpnNzy60MQdLBKH5xc1poZjyh9rMYdzSCbfhLNM4rgLR2wOvfGPOoQ/pub?output=csv";
+
+const C = {
+  bg:     "#0d1520",
+  otc:    "#38c8ff",
+  blast:  "#00e8b0",
+  orange: "#ff9f1c",
+  yellow: "#f5e642",
+  red:    "#ff3d5a",
+  dim:    "#4a6080"
+};
+
+/* ═══════════════════════════════════════════════
+   STATE
+═══════════════════════════════════════════════ */
+let allData  = [];
+let dataMap  = {};
+
+let chart    = null;
+
+let showOtc  = true;
+let showBlast= true;
+
+/* ═══════════════════════════════════════════════
+   CSV PARSER
+═══════════════════════════════════════════════ */
+function parseCSV(text){
+
+const rows=[]
+
+const lines=text.trim().split('\n')
+
+const headers=lines[0]
+.match(/(".*?"|[^",]+)(?=\s*,|\s*$)/g)
+.map(x=>x.replace(/"/g,'').trim().toLowerCase())
+
+for(let i=1;i<lines.length;i++){
+
+const cols=
+lines[i]
+.match(/(".*?"|[^",]+)(?=\s*,|\s*$)/g)
+?.map(x=>x.replace(/"/g,''))
+
+if(!cols)continue
+
+const row={}
+
+headers.forEach((h,j)=>{
+
+row[h]=cols[j]||""
+
+})
+
+rows.push(row)
+
+}
+
+return rows.filter(r=>r.date&&r.symbol)
+
+}
+
+/* ═══════════════════════════════════════════════
+   LOAD SHEET  (tries CORS proxies)
+═══════════════════════════════════════════════ */
+async function loadSheet() {
+  const urls = [
+    SHEET_URL,
+    `https://corsproxy.io/?${encodeURIComponent(SHEET_URL)}`,
+    `https://api.allorigins.win/raw?url=${encodeURIComponent(SHEET_URL)}`
+  ];
+  for (const u of urls) {
+    try {
+      const r = await fetch(u, { cache:"no-cache" });
+      if (r.ok) { allData = parseCSV(await r.text()); return; }
+    } catch(_) {}
+  }
+  throw new Error("无法读取 Google Sheet，已加载演示数据。请把 Sheet 权限设为「知道链接的人可以查看」后刷新。");
+}
+
+/* ═══════════════════════════════════════════════
+   ASSET SELECT
+═══════════════════════════════════════════════ */
+function buildSelect() {
+  const ORDER = ["CRYPTO","STOCK","COMMODITY"];
+  const groups = {};
+  allData.forEach(r => {
+    const g = r.group || "OTHER";
+    if (!groups[g]) groups[g] = new Set();
+    groups[g].add(r.symbol);
+  });
+  const sel = document.getElementById("assetSel");
+  sel.innerHTML = "";
+  [...ORDER, ...Object.keys(groups).filter(g => !ORDER.includes(g))].forEach(g => {
+    if (!groups[g]) return;
+    const og = document.createElement("optgroup");
+    og.label = g;
+    [...groups[g]].sort().forEach(s => {
+      const o = document.createElement("option");
+      o.value = o.textContent = s;
+      og.appendChild(o);
+    });
+    sel.appendChild(og);
+  });
+  if ([...sel.options].some(o => o.value === "BTC")) sel.value = "BTC";
+}
+
+/* ═══════════════════════════════════════════════
+   FILTER
+═══════════════════════════════════════════════ */
+function getRows(){
+
+const sym=
+document.getElementById(
+"assetSel"
+).value
+
+const from=
+document.getElementById(
+"dateFrom"
+).value
+
+const to=
+document.getElementById(
+"dateTo"
+).value
+
+
+return (dataMap[sym]||[])
+
+.filter(r=>
+
+(!from||r.date>=from)
+
+&&
+
+(!to||r.date<=to)
+
+)
+
+.sort(
+
+(a,b)=>
+
+a.date.localeCompare(
+b.date
+)
+
+)
+
+}
+
+/* ═══════════════════════════════════════════════
+   FIX 1: X-axis keeps FULL date (YYYY-MM-DD)
+   Display label shows YY-MM-DD to save space
+   but the underlying value is always the full date,
+   so cross-year data never collides.
+═══════════════════════════════════════════════ */
+function fmtXLabel(dateStr) {
+  // "2026-05-19" → "26-05-19"  (keeps year, saves space)
+  return dateStr ? dateStr.slice(2) : dateStr;
+}
+
+/* ═══════════════════════════════════════════════
+   FIX 2: Reference lines use markLine on a
+   dedicated invisible scatter, NOT a data-series.
+   This means they are completely unaffected by
+   toggle(), series re-renders, or Y-axis rescaling.
+═══════════════════════════════════════════════ */
+function refLineSeries(){
+
+return [
+
+{
+id:"ref_otc",
+type:"scatter",
+yAxisIndex:0,
+symbol:"none",
+silent:true,
+data:[],
+
+markLine:{
+silent:true,
+symbol:["none","none"],
+animation:false,
+
+label:{show:false},
+
+data:[
+
+{
+yAxis:1000,
+lineStyle:{
+color:C.orange,
+type:"dashed",
+width:1,
+opacity:.75
+}
+},
+
+{
+yAxis:0,
+lineStyle:{
+color:C.yellow,
+type:"dashed",
+width:1,
+opacity:.75
+}
+}
+
+]
+
+}
+
+},
+
+{
+
+id:"ref_blast",
+
+type:"scatter",
+
+yAxisIndex:1,
+
+symbol:"none",
+
+silent:true,
+
+data:[],
+
+markLine:{
+
+silent:true,
+
+symbol:["none","none"],
+
+animation:false,
+
+label:{show:false},
+
+data:[
+
+{
+
+yAxis:200,
+
+lineStyle:{
+color:C.orange,
+type:"dashed",
+width:1,
+opacity:.75
+}
+
+},
+
+{
+
+yAxis:0,
+
+lineStyle:{
+color:C.yellow,
+type:"dashed",
+width:1,
+opacity:.75
+}
+
+}
+
+]
+
+}
+
+}
+
+]
+
+}  
+/* ═══════════════════════════════════════════════
+   FIX 3: Each series gets a STABLE unique id.
+   We destroy and re-create with notMerge=true
+   so there is ZERO stale-id residue between renders.
+═══════════════════════════════════════════════ */
+function buildDataSeries(rows) {
+  const phase = rows.map(r => (r.phase||"").toUpperCase());
+  const near  = rows.map(r => r.near==="TRUE"||r.near==="true"||r.near==="1");
+  const otcV  = rows.map(r => r.otc   !== "" ? +r.otc   : null);
+  const blstV = rows.map(r => r.blast !== "" ? +r.blast : null);
+  const series = [];
+
+  /* --- draw segment-by-segment lines --- */
+  function segs(vals, color, yIdx, pfx) {
+    if (!vals.some(v => v !== null)) return;
+    for (let i = 1; i < vals.length; i++) {
+      if (vals[i] === null || vals[i-1] === null) continue;
+      const dash = phase[i]==="OUT" || phase[i-1]==="OUT";
+series.push({
+
+id:`${pfx}_L${i}`,
+
+type:"line",
+
+yAxisIndex:yIdx,
+
+silent:true,
+
+symbol:"none",
+
+z:1,
+zlevel:1,
+
+clip:true,
+
+lineStyle:{
+width:3,
+color,
+type:dash?"dashed":"solid"
+},
+
+data:[
+[i-1,vals[i-1]],
+[i,vals[i]]
+]
+
+});
+
+    }
+  }
+
+  /* --- FIX 4: near-points get a glowing ring symbol --- */
+  function pts(vals, color, yIdx, pfx) {
+    if (!vals.some(v => v !== null)) return;
+    series.push({
+      id:   `${pfx}_P`,
+      type: "scatter",
+      yAxisIndex: yIdx,
+z:999,
+zlevel:999,
+      data: vals.map((v, i) => {
+        if (v === null) return null;
+        const isNear = near[i];
+return {
+
+value:[i,v],
+
+// 点大小
+symbolSize:isNear?20:14,
+
+symbol:isNear
+?"diamond"
+:"circle",
+
+itemStyle:{
+
+// OUT空心 IN实心
+color:
+phase[i]==="OUT"
+?"rgba(13,21,32,1)"      // 背景纯不透明
+:`${color}`,
+
+opacity:1,
+
+borderColor:isNear
+?C.orange
+:color,
+
+borderWidth:isNear?4:3,
+
+shadowBlur:isNear?8:0,
+
+shadowColor:isNear
+?C.orange
+:"transparent"
+
+},
+emphasis:{
+scale:false,
+
+itemStyle:{
+opacity:1
+}
+
+}
+
+};      }).filter(Boolean)
+    });
+  }
+
+  if (showOtc)   { segs(otcV,  C.otc,   0, "otc");   pts(otcV,  C.otc,   0, "otc");  }
+  if (showBlast) { segs(blstV, C.blast, 1, "blt");   pts(blstV, C.blast, 1, "blt"); }
+
+if(series.length===0){
+
+series.push({
+
+id:"empty",
+
+type:"line",
+
+silent:true,
+
+symbol:"none",
+
+data:[]
+
+})
+
+}
+
+return{
+otcV,
+blstV,
+phase,
+near,
+series
+};
+}
+
+/* ═════════════════════════════════════
+   QUALITY
+════════════════════════════════════ */
+function calcQuality(rows){
+
+if(!rows.length){
+
+return{
+grade:"🟡普通",
+reason:""
+};
+
+}
+
+
+/* 找周期起点 */
+
+const inDay1=
+
+rows.find(
+r=>
+
+(r.phase||"")
+.toUpperCase()==="IN"
+
+&&
+
++r.day===1
+);
+
+
+const outDay1=
+
+rows.find(
+r=>
+
+(r.phase||"")
+.toUpperCase()==="OUT"
+
+&&
+
++r.day===1
+);
+
+
+
+/* ===================
+   进场
+=================== */
+
+if(inDay1){
+
+const otc0=
++inDay1.otc||0;
+
+const blast0=
++inDay1.blast||0;
+
+
+/* 先爆破后进场 */
+
+if(blast0>200){
+
+return{
+grade:"🔴劣质进场",
+reason:"先爆破后进场"
+};
+
+}
+
+
+/* 一周法则 */
+
+const week=
+
+rows.filter(
+r=>
+
+(r.phase||"")
+.toUpperCase()==="IN"
+
+&&
+
++r.day<=7
+);
+
+
+if(week.length>=7){
+
+const over200=
+week.some(
+r=>(+r.blast||0)>200
+);
+
+const avg=
+week.reduce(
+(a,b)=>a+(+b.blast||0),
+0
+)/week.length;
+
+
+if(
+!over200
+&&
+avg<=blast0
+){
+
+return{
+
+grade:"🔴劣质进场",
+
+reason:"一周未破200"
+
+};
+
+}
+
+}
+
+
+
+/* 爆破回落节点 */
+
+let nodes=[otc0];
+
+for(
+let i=1;
+i<rows.length;
+i++
+){
+
+let p=
++rows[i-1].blast||0;
+
+let n=
++rows[i].blast||0;
+
+
+if(
+p>200
+&&
+n<=200
+){
+
+nodes.push(
++rows[i].otc||0
+);
+
+}
+
+}
+
+
+let up=0;
+
+for(
+let i=1;
+i<nodes.length;
+i++
+){
+
+if(
+nodes[i]>
+nodes[i-1]
+){
+
+up++;
+
+}
+
+}
+
+
+if(nodes.length>=2){
+
+if(
+up===nodes.length-1
+){
+
+return{
+
+grade:"🟢优质进场",
+
+reason:"场外持续抬升"
+
+};
+
+}
+
+
+if(up===0){
+
+return{
+
+grade:"🔴劣质进场",
+
+reason:"拉盘动力减弱"
+
+};
+
+}
+
+return{
+
+grade:"🟡普通进场",
+
+reason:"节点有涨有跌"
+
+};
+
+}   // ←结束 if(nodes.length>=2)
+
+}   // ←结束 if(inDay1)
+
+
+/* ===================
+   退场
+=================== */
+
+else if(outDay1){
+
+const otc0=
++outDay1.otc||0;
+
+
+let node=-1;
+
+
+/* 找最近负→正 */
+
+for(
+let i=
+rows.length-1;
+i>0;
+i--
+){
+
+let p=
++rows[i-1].blast||0;
+
+let n=
++rows[i].blast||0;
+
+if(
+p<0
+&&
+n>0
+){
+
+node=i;
+break;
+
+}
+
+}
+
+
+if(node>0){
+
+const old=
++rows[node].otc||0;
+
+
+if(
+otc0<old
+){
+
+return{
+
+grade:"🟢优质退场",
+
+reason:"场外持续下降"
+
+};
+
+}
+
+
+return{
+
+grade:"🔴劣质退场",
+
+reason:"场外不降反升"
+
+};
+
+}
+
+}
+
+
+return{
+
+grade:"🟡普通",
+
+reason:"无关键节点"
+
+};
+
+}
+function render() {
+  const rows = getRows();
+  updateStats(rows);
+  if (!rows.length) { chart.clear(); return; }
+
+  const dates = rows.map(r => r.date);          // full YYYY-MM-DD kept
+  const { otcV, blstV, phase, near, series } = buildDataSeries(rows);
+/* ===== Good / Bad 标签 ===== */
+
+const q = calcQuality(rows);
+
+let qualityMark=[];
+
+const firstIndex=
+rows.findIndex(
+r=>+r.day===1
+);
+
+const phaseType=
+(rows[firstIndex]?.phase||"")
+.toUpperCase();
+
+let yPos=
+phaseType==="OUT"
+?1700
+:1900;
+if(firstIndex>=0){
+
+let txt="Bad";
+let markColor="#ff4d4f";
+
+if(q.grade.includes("优质")){
+ txt="Good";
+ markColor="#00d26a";
+}
+
+if(q.grade.includes("普通")){
+ txt="Normal";
+ markColor="#e6b422";
+}
+qualityMark.push({
+
+id:"qualityMark",
+
+type:"scatter",
+
+z:9999,
+
+symbol:"roundRect",
+
+symbolSize:[64,28],
+
+data:[[
+firstIndex,
+yPos
+]],
+
+label:{
+
+show:true,
+
+formatter:txt,
+
+fontSize:15,
+
+fontWeight:"bold",
+
+color:"#fff"
+
+},
+
+itemStyle:{
+
+color:markColor,
+
+borderRadius:8,
+
+shadowBlur:15,
+
+shadowColor:markColor
+
+}
+
+})
+
+}
+
+  /* tooltip formatter */
+function fmt(params){
+
+if(!params.length)return ""
+
+const axisDate=
+params[0].axisValue
+
+const i=
+dates.findIndex(
+d=>d===axisDate
+)
+
+if(i===-1)return ""
+
+const ph=
+phase[i]==="IN"
+?
+`<span style="color:${C.blast};font-weight:700">进场期</span>`
+:
+`<span style="color:${C.red};font-weight:700">退场期</span>`
+
+const nr=
+near[i]
+?
+`<span style="color:${C.orange}">⚠逼近</span>`
+:
+`<span style="color:${C.dim}">否</span>`
+
+return `
+<div style="
+line-height:1.9;
+min-width:180px;
+font-family:'Rajdhani'
+">
+
+<div style="
+font-size:11px;
+color:${C.dim};
+letter-spacing:2px;
+margin-bottom:6px
+">
+${dates[i]}
+</div>
+
+<div>
+🔷 场外指数:
+<b style="color:${C.otc}">
+${otcV[i]??"N/A"}
+</b>
+</div>
+
+<div>
+🟩 爆破指数:
+<b style="color:${C.blast}">
+${blstV[i]??"N/A"}
+</b>
+</div>
+
+<div>
+🔄 状态:
+${ph}
+第 ${rows[i].day||"?"} ${
+(document.getElementById("assetSel").value==="地产" && phase[i]==="IN")
+?"月"
+:"天"
+}
+</div>
+
+<div>
+🚨逼近:
+${nr}
+</div>
+<div>
+
+⭐ ${q.grade}
+
+</div>
+
+<div style="
+color:#4a6080;
+font-size:11px;
+">
+
+${q.reason}
+
+</div>
+
+</div>
+`
+}
+
+  chart.setOption({
+    backgroundColor: C.bg,
+    animation: false,
+    tooltip: {
+      trigger: "axis",
+      backgroundColor: "#111e30",
+      borderColor: C.otc,
+      borderWidth: 1,
+      textStyle: { color:"#fff" },
+      axisPointer: { type:"line", snap:true },
+      formatter: fmt
+    },
+    grid:   { left:80, right:90, top:50, bottom:145 },
+    xAxis: {
+      type: "category",
+      data: dates,                              // FULL date string
+      boundaryGap: false,
+      axisLabel: {
+        color: C.dim,
+        rotate: 45,
+        fontSize: 11,
+        fontFamily: "'Share Tech Mono',monospace",
+        formatter: fmtXLabel                  // FIX 1: YY-MM-DD display only
+      },
+      axisLine:  { lineStyle:{ color:"#1e3352" } },
+      splitLine: { show:true, lineStyle:{ color:"#1a2e48", type:"dashed" } }
+    },
+    yAxis: [
+      {
+        name: "场外指数",
+        nameTextStyle: { color:C.otc, fontSize:12, padding:[0,0,0,8] },
+        min:-350, max:2150, interval:500,
+        axisLabel: { color:C.otc, fontFamily:"'Share Tech Mono',monospace", fontSize:11 },
+        axisLine:  { lineStyle:{ color:"#1e3352" } },
+        splitLine: { lineStyle:{ color:"#1a2e48" } }
+      },
+      {
+        name: "爆破指数",
+        nameTextStyle: { color:C.blast, fontSize:12, padding:[0,8,0,0] },
+        min:-70, max:430, interval:100,
+        axisLabel: { color:C.blast, fontFamily:"'Share Tech Mono',monospace", fontSize:11 },
+        axisLine:  { lineStyle:{ color:"#1e3352" } },
+        splitLine: { show:false }
+      }
+    ],
+    // FIX 2+3: ref lines via markLine on empty scatter,
+    //          all data series rebuilt fresh (notMerge=true below)
+dataZoom: [
+{
+type:'inside',
+
+xAxisIndex:0,
+
+zoomOnMouseWheel:'shift',
+
+moveOnMouseMove:false,
+
+moveOnMouseWheel:false
+
+},
+{
+type:'slider',
+
+xAxisIndex:0,
+
+height:24,
+
+bottom:30,
+
+start:0,
+
+end:100,
+
+realtime:false,
+
+borderColor:"#1e3352",
+
+backgroundColor:"#0f1a2e",
+
+fillerColor:"rgba(56,200,255,.25)",
+
+emphasis:{
+
+handleStyle:{
+
+color:"#5ad1ff",
+
+borderColor:"#5ad1ff",
+
+shadowBlur:14,
+
+shadowColor:"rgba(90,209,255,.6)"
+
+},
+
+fillerColor:"rgba(56,200,255,.35)"
+
+},
+
+dataBackground:{
+
+lineStyle:{
+
+color:"#2a4a6e",
+
+width:1
+
+},
+
+areaStyle:{
+
+color:"rgba(56,200,255,.07)"
+
+}
+
+},
+
+handleSize:16,
+
+handleStyle:{
+
+color:"#38c8ff",
+
+borderColor:"#38c8ff",
+
+borderWidth:2,
+
+shadowBlur:8,
+
+shadowColor:"rgba(56,200,255,.5)"
+
+},
+
+moveHandleSize:0,
+
+showDetail:false
+
+}
+],
+series:[
+...refLineSeries(),
+...series,
+...qualityMark
+]
+  },
+  true   // notMerge = true  ← FIX 3: wipes all stale series before drawing
+  );
+}
+
+/* ═══════════════════════════════════════════════
+   STATS BAR
+═══════════════════════════════════════════════ */
+function updateStats(rows) {
+const clear = () =>
+[
+"s-otc",
+"s-blast",
+"s-phase",
+"s-day",
+"s-near",
+"s-cnt",
+"s-quality"
+]
+      .forEach(id => { document.getElementById(id).textContent="--"; });
+  if (!rows.length) { clear(); return; }
+  const l = rows[rows.length-1];
+  document.getElementById("s-otc").textContent   = l.otc   || "--";
+  document.getElementById("s-blast").textContent = l.blast !== "" ? l.blast : "N/A";
+  const pe = document.getElementById("s-phase");
+const isIn=
+
+String(
+l.phase
+).toUpperCase()
+
+.includes(
+"IN"
+)
+
+pe.textContent=
+isIn
+?
+"进场期"
+:
+"退场期"
+
+pe.className=
+"stat-val "+
+
+(
+isIn
+?
+"c-in"
+:
+"c-out"
+);
+  const sym=document.getElementById("assetSel").value;
+
+document.getElementById("s-day").textContent=
+(sym==="地产" && isIn)
+?(l.day||"--")+" 月"
+:(l.day||"--")+" 天";
+  const isNear = l.near==="TRUE"||l.near==="true"||l.near==="1";
+  const ne = document.getElementById("s-near");
+  ne.textContent = isNear ? "⚠ 逼近" : "正常";
+  ne.className   = "stat-val "+(isNear?"c-near":"");
+  document.getElementById("s-cnt").textContent   = rows.length+" 天";const q=
+calcQuality(rows);
+
+document
+.getElementById(
+"s-quality"
+)
+
+.innerHTML=
+
+q.grade;
+}
+
+/* ═══════════════════════════════════════════════
+   TOGGLE
+═══════════════════════════════════════════════ */
+function toggle(which){
+
+if(which==="otc"){
+
+showOtc=!showOtc
+
+document
+.getElementById("btnOtc")
+.classList
+.toggle(
+"on-otc",
+showOtc
+)
+
+}else{
+
+showBlast=!showBlast
+
+document
+.getElementById("btnBlast")
+.classList
+.toggle(
+"on-blast",
+showBlast
+)
+
+}
+
+/* 不clear 不重建空图 */
+
+render()
+
+}
+/* ═══════════════════════════════════════════════
+   FALLBACK DATA  (2 real dates from your sheet)
+═══════════════════════════════════════════════ */
+const FALLBACK_CSV = `date,symbol,group,otc,blast,phase,day,near
+2020-09-02,大盘,CRYPTO,738,,OUT,23,FALSE
+2020-09-02,ETH,CRYPTO,989,,IN,4,FALSE
+2020-09-02,LINK,CRYPTO,1263,,OUT,15,FALSE
+2020-09-02,BNB,CRYPTO,853,,IN,1,FALSE
+2020-09-02,EOS,CRYPTO,872,,OUT,10,FALSE
+2020-09-02,ADA,CRYPTO,601,,IN,4,FALSE
+2020-09-02,TRX,CRYPTO,1398,,IN,2,FALSE
+2020-09-02,NEO,CRYPTO,2010,,IN,58,FALSE
+2020-09-02,COMP,CRYPTO,1505,,IN,27,FALSE
+2020-09-02,AMPL,CRYPTO,1470,,IN,13,FALSE
+2020-09-02,BNT,CRYPTO,897,,OUT,19,FALSE
+2026-05-18,BTC,CRYPTO,964,11,IN,36,TRUE
+2026-05-18,ETH,CRYPTO,816,-74,OUT,6,FALSE
+2026-05-18,BNB,CRYPTO,1100,95,OUT,1,FALSE
+2026-05-18,SOL,CRYPTO,944,47,IN,14,TRUE
+2026-05-18,DOGE,CRYPTO,1347,-28,IN,32,FALSE
+2026-05-18,纳指,STOCK,1166,149,IN,38,FALSE
+2026-05-18,期权波动率,CRYPTO,835,193,IN,2,FALSE
+2026-05-18,LTC,CRYPTO,954,-40,OUT,6,FALSE
+2026-05-18,CRV,CRYPTO,1078,31,OUT,3,FALSE
+2026-05-18,LINK,CRYPTO,1183,61,OUT,3,FALSE
+2026-05-18,UNI,CRYPTO,1018,81,OUT,3,FALSE
+2026-05-18,PEPE,CRYPTO,1017,41,OUT,4,FALSE
+2026-05-18,SUI,CRYPTO,1301,1,OUT,4,FALSE
+2026-05-19,BTC,CRYPTO,995,-21,OUT,1,FALSE
+2026-05-19,ETH,CRYPTO,866,-71,OUT,7,FALSE
+2026-05-19,BNB,CRYPTO,1108,81,OUT,2,FALSE
+2026-05-19,SOL,CRYPTO,979,33,OUT,1,FALSE
+2026-05-19,DOGE,CRYPTO,1281,-74,OUT,1,FALSE
+2026-05-19,纳指,STOCK,1204,109,OUT,1,FALSE
+2026-05-19,期权波动率,CRYPTO,853,153,IN,3,FALSE
+2026-05-19,LTC,CRYPTO,944,-16,OUT,7,FALSE
+2026-05-19,CRV,CRYPTO,1141,34,OUT,4,FALSE
+2026-05-19,LINK,CRYPTO,1223,66,OUT,4,FALSE
+2026-05-19,UNI,CRYPTO,1081,88,OUT,4,FALSE
+2026-05-19,PEPE,CRYPTO,1035,-30,OUT,5,FALSE
+2026-05-19,SUI,CRYPTO,1359,104,OUT,5,FALSE
+2026-05-19,SEI,CRYPTO,1049,57,OUT,4,FALSE
+2026-05-19,HYPE,CRYPTO,1297,288,IN,3,FALSE
+2026-05-19,TRUMP,CRYPTO,675,-84,OUT,56,FALSE
+2026-05-19,PUMP,CRYPTO,1150,4,OUT,7,FALSE
+2026-05-19,ZEC,CRYPTO,1474,152,IN,39,FALSE
+2026-05-19,SNDK,STOCK,1032,105,IN,43,FALSE
+2026-05-19,MU,STOCK,1016,127,IN,39,FALSE
+2026-05-19,AMZN,STOCK,1123,37,IN,33,FALSE
+2026-05-19,MSFT,STOCK,1630,198,IN,1,FALSE
+2026-05-19,HOOD,STOCK,1103,140,OUT,19,FALSE
+2026-05-19,COIN,STOCK,1129,20,OUT,47,FALSE
+2026-05-19,CIRCLE,STOCK,932,81,IN,13,TRUE
+2026-05-19,TSLA,STOCK,1467,105,IN,14,FALSE
+2026-05-19,NVDA,STOCK,1257,170,IN,32,FALSE
+2026-05-19,AAPL,STOCK,1639,181,IN,19,FALSE
+2026-05-19,GOOG,STOCK,1633,175,IN,33,FALSE
+2026-05-19,国内AI_ETF,STOCK,1738,171,IN,27,FALSE
+2026-05-19,国内机器人,STOCK,2372,210,IN,25,FALSE
+2026-05-19,A股指数,STOCK,1405,94,IN,23,FALSE
+2026-05-19,黄金XAU,COMMODITY,881,17,OUT,23,FALSE
+2026-05-19,白银XAG,COMMODITY,947,77,OUT,2,FALSE
+2026-05-19,地产,COMMODITY,1080,-25,IN,11,FALSE
+2026-05-19,布伦特原油,COMMODITY,1079,163,IN,4,FALSE`;
+
+
+async function init() {
+  chart = echarts.init(document.getElementById("chart"), null, { renderer:"canvas" });
+  window.addEventListener("resize", () => chart.resize());
+
+  try {
+    await loadSheet();
+  } catch(e) {
+    document.getElementById("err").style.display = "block";
+    document.getElementById("err").textContent   = "⚠ " + e.message;
+    allData = parseCSV(FALLBACK_CSV).filter(r => r.date && r.symbol);
+  }
+
+allData.forEach(r=>{
+
+if(!dataMap[r.symbol]){
+
+dataMap[r.symbol]=[]
+
+}
+
+dataMap[r.symbol].push(r)
+
+})
+
+buildSelect();
+
+render();
+  document.getElementById("loading").style.display = "none";
+
+  document.getElementById("dateFrom").addEventListener("change", render);
+  document.getElementById("dateTo").addEventListener("change", render);
+  document.getElementById("assetSel").addEventListener("change", render);
+}
+function zoomAll(){
+
+chart.dispatchAction({
+
+type:'dataZoom',
+
+start:0,
+end:100
+
+})
+
+}
+
+
+
+function zoomDays(days){
+
+const rows=getRows()
+
+if(!rows.length)return
+
+const endDate=
+
+rows[
+rows.length-1
+].date
+
+
+const startDate=
+
+new Date(
+endDate
+)
+
+startDate.setDate(
+
+startDate.getDate()-days
+
+)
+
+
+const start =
+new Date(
+startDate.getTime()
+-
+startDate.getTimezoneOffset()*60000
+)
+.toISOString()
+.slice(0,10)
+
+
+chart.dispatchAction({
+
+type:'dataZoom',
+
+startValue:start,
+
+endValue:endDate
+
+})
+
+}
+init();
+</script>
+</body>
+</html>
