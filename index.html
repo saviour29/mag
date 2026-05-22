@@ -855,391 +855,226 @@ series
 /* ═════════════════════════════════════
    QUALITY
 ════════════════════════════════════ */
+/* ═════════════════════════════════════
+   QUALITY — 多周期分析
+   返回 cycles[] 数组，每个 cycle 包含:
+   { startIdx, endIdx, phase, grade, reason }
+════════════════════════════════════ */
+function calcAllCycles(rows){
+  const cycles = [];
+  if (!rows.length) return cycles;
+
+  const ph  = r => (r.phase||"").toUpperCase();
+  const otc = r => +r.otc   || 0;
+  const bst = r => r.blast !== "" ? +r.blast : null;
+
+  /* ── Step 1: 切分所有周期段 ── */
+  // 每当 day===1 就开启一个新周期，end 为下一个 day===1 的前一个索引（或末尾）
+  const starts = [];
+  rows.forEach((r,i) => {
+    if (+r.day === 1) starts.push(i);
+  });
+
+  for (let s = 0; s < starts.length; s++) {
+    const startIdx = starts[s];
+    const endIdx   = (s+1 < starts.length) ? starts[s+1] - 1 : rows.length - 1;
+    const cycleRows = rows.slice(startIdx, endIdx + 1);
+    const phase     = ph(cycleRows[0]);
+
+    const result = analyzeCycle(cycleRows, phase, rows, startIdx);
+    cycles.push({
+      startIdx, endIdx, phase,
+      grade:  result.grade,
+      reason: result.reason
+    });
+  }
+
+  return cycles;
+
+  /* ── 内部函数：分析单个周期 ── */
+  function analyzeCycle(cycleRows, phase, allRows, startIdx) {
+    const day1 = cycleRows[0];
+
+    /* ───── 进场期 ───── */
+    if (phase === "IN") {
+      const otc0   = otc(day1);
+      const blast0 = bst(day1) ?? 0;
+
+      // ① 先爆破后进场
+      if (blast0 > 200) {
+        return { grade:"🔴劣质进场", reason:"先爆破后进场" };
+      }
+
+      // ② 一周不破200法则
+      const weekRows = cycleRows.filter(r => +r.day >= 1 && +r.day <= 7);
+      if (weekRows.length >= 3) {
+        const over200 = weekRows.some(r => (bst(r) ?? 0) > 200);
+        if (!over200) {
+          const avg = weekRows.reduce((s,r) => s + (bst(r) ?? 0), 0) / weekRows.length;
+          if (avg <= blast0) {
+            return { grade:"🔴劣质进场", reason:"一周未破200且动能不增" };
+          }
+        }
+      }
+
+      // ③ 关键节点法：爆破从 >200 回落至 ≤200 的场外序列
+      const nodes = [otc0];
+      for (let i = 1; i < cycleRows.length; i++) {
+        const prev = bst(cycleRows[i-1]) ?? 0;
+        const curr = bst(cycleRows[i])   ?? 0;
+        if (prev > 200 && curr <= 200) {
+          nodes.push(otc(cycleRows[i]));
+        }
+      }
+
+      if (nodes.length >= 2) {
+        let up = 0;
+        for (let i = 1; i < nodes.length; i++) {
+          if (nodes[i] > nodes[i-1]) up++;
+        }
+        const total = nodes.length - 1;
+        if (up === total) return { grade:"🟢优质进场", reason:`节点持续抬升 ${up}/${total}` };
+        if (up === 0)     return { grade:"🔴劣质进场", reason:"拉盘动力持续减弱" };
+        return { grade:"🟡普通进场", reason:`节点涨跌混合 ${up}/${total}` };
+      }
+
+      // 节点不足，但已知不是"先爆破"也不是"一周不破"，且周期已经结束
+      // 如果周期完整结束（后面还有别的周期）才下定论；否则进行中
+      const isCompleted = (startIdx + cycleRows.length) < allRows.length;
+      return {
+        grade: isCompleted ? "🟡普通进场" : "🟡普通",
+        reason: isCompleted ? "节点不足判断" : "进行中待观察"
+      };
+    }
+
+    /* ───── 退场期 ───── */
+    if (phase === "OUT") {
+      const otc0 = otc(day1);
+
+      // 在全局 allRows 中找退场D1之前最近的"爆破负→正"节点
+      let nodeOtc = null;
+      for (let i = startIdx - 1; i > 0; i--) {
+        const prev = bst(allRows[i-1]) ?? 0;
+        const curr = bst(allRows[i])   ?? 0;
+        if (prev < 0 && curr > 0) {
+          nodeOtc = otc(allRows[i]);
+          break;
+        }
+      }
+
+      if (nodeOtc !== null) {
+        if (otc0 < nodeOtc) {
+          return { grade:"🟢优质退场", reason:`场外下降 ${nodeOtc}→${otc0}` };
+        }
+        return { grade:"🔴劣质退场", reason:`场外不降反升 ${nodeOtc}→${otc0}` };
+      }
+
+      const isCompleted = (startIdx + cycleRows.length) < allRows.length;
+      return {
+        grade: isCompleted ? "🟡普通退场" : "🟡普通",
+        reason: isCompleted ? "无法找到负→正节点" : "进行中待观察"
+      };
+    }
+
+    return { grade:"🟡普通", reason:"未知阶段" };
+  }
+}
+
+/* 保留旧接口给 statsbar 用：取最后一个周期的质量 */
 function calcQuality(rows){
-
-if(!rows.length){
-
-return{
-grade:"🟡普通",
-reason:""
-};
-
-}
-
-
-/* 找周期起点 */
-
-const inDay1=
-
-rows.find(
-r=>
-
-(r.phase||"")
-.toUpperCase()==="IN"
-
-&&
-
-+r.day===1
-);
-
-
-const outDay1=
-
-rows.find(
-r=>
-
-(r.phase||"")
-.toUpperCase()==="OUT"
-
-&&
-
-+r.day===1
-);
-
-
-
-/* ===================
-   进场
-=================== */
-
-if(inDay1){
-
-const otc0=
-+inDay1.otc||0;
-
-const blast0=
-+inDay1.blast||0;
-
-
-/* 先爆破后进场 */
-
-if(blast0>200){
-
-return{
-grade:"🔴劣质进场",
-reason:"先爆破后进场"
-};
-
-}
-
-
-/* 一周法则 */
-
-const week=
-
-rows.filter(
-r=>
-
-(r.phase||"")
-.toUpperCase()==="IN"
-
-&&
-
-+r.day<=7
-);
-
-
-if(week.length>=7){
-
-const over200=
-week.some(
-r=>(+r.blast||0)>200
-);
-
-const avg=
-week.reduce(
-(a,b)=>a+(+b.blast||0),
-0
-)/week.length;
-
-
-if(
-!over200
-&&
-avg<=blast0
-){
-
-return{
-
-grade:"🔴劣质进场",
-
-reason:"一周未破200"
-
-};
-
-}
-
-}
-
-
-
-/* 爆破回落节点 */
-
-let nodes=[otc0];
-
-for(
-let i=1;
-i<rows.length;
-i++
-){
-
-let p=
-+rows[i-1].blast||0;
-
-let n=
-+rows[i].blast||0;
-
-
-if(
-p>200
-&&
-n<=200
-){
-
-nodes.push(
-+rows[i].otc||0
-);
-
-}
-
-}
-
-
-let up=0;
-
-for(
-let i=1;
-i<nodes.length;
-i++
-){
-
-if(
-nodes[i]>
-nodes[i-1]
-){
-
-up++;
-
-}
-
-}
-
-
-if(nodes.length>=2){
-
-if(
-up===nodes.length-1
-){
-
-return{
-
-grade:"🟢优质进场",
-
-reason:"场外持续抬升"
-
-};
-
-}
-
-
-if(up===0){
-
-return{
-
-grade:"🔴劣质进场",
-
-reason:"拉盘动力减弱"
-
-};
-
-}
-
-return{
-
-grade:"🟡普通进场",
-
-reason:"节点有涨有跌"
-
-};
-
-}   // ←结束 if(nodes.length>=2)
-
-}   // ←结束 if(inDay1)
-
-
-/* ===================
-   退场
-=================== */
-
-else if(outDay1){
-
-const otc0=
-+outDay1.otc||0;
-
-
-let node=-1;
-
-
-/* 找最近负→正 */
-
-for(
-let i=
-rows.length-1;
-i>0;
-i--
-){
-
-let p=
-+rows[i-1].blast||0;
-
-let n=
-+rows[i].blast||0;
-
-if(
-p<0
-&&
-n>0
-){
-
-node=i;
-break;
-
-}
-
-}
-
-
-if(node>0){
-
-const old=
-+rows[node].otc||0;
-
-
-if(
-otc0<old
-){
-
-return{
-
-grade:"🟢优质退场",
-
-reason:"场外持续下降"
-
-};
-
-}
-
-
-return{
-
-grade:"🔴劣质退场",
-
-reason:"场外不降反升"
-
-};
-
-}
-
-}
-
-
-return{
-
-grade:"🟡普通",
-
-reason:"无关键节点"
-
-};
-
-}
-function render() {
+  const cycles = calcAllCycles(rows);
+  if (!cycles.length) return { grade:"🟡普通", reason:"" };
+  return cycles[cycles.length - 1];
+}function render() {
   const rows = getRows();
+// ─── 计算双轴锁定范围（5:1 比例，0点对齐） ───
+  const otcVals   = rows.map(r => r.otc   !== "" ? +r.otc   : null).filter(v => v !== null);
+  const blastVals = rows.map(r => r.blast !== "" ? +r.blast : null).filter(v => v !== null);
+  // 把爆破值×5 折算成场外尺度，统一在场外坐标系里求min/max
+  const allInOtcScale = [
+    ...otcVals,
+    ...blastVals.map(v => v * 5)
+  ];
+  const dataMin = allInOtcScale.length ? Math.min(...allInOtcScale) : -350;
+  const dataMax = allInOtcScale.length ? Math.max(...allInOtcScale) :  2150;
+  // 向500对齐 + 留一格padding，并保证不小于默认范围
+  const leftMin  = Math.min(-350, Math.floor(dataMin / 500) * 500 - 500);
+  const leftMax  = Math.max(2150, Math.ceil (dataMax / 500) * 500 + 500);
+  const rightMin = leftMin / 5;   // 锁定 5:1
+  const rightMax = leftMax / 5;
   updateStats(rows);
   if (!rows.length) { chart.clear(); return; }
 
   const dates = rows.map(r => r.date);          // full YYYY-MM-DD kept
   const { otcV, blstV, phase, near, series } = buildDataSeries(rows);
-/* ===== Good / Bad 标签 ===== */
+/* ===== Good / Bad / Normal 多周期标签（顶部锚定 + 虚线引导） ===== */
 
-const q = calcQuality(rows);
+const cycles = calcAllCycles(rows);
+let qualityMark = [];
 
-let qualityMark=[];
+cycles.forEach((cyc, idx) => {
+  let txt, bgColor, fontColor;
+  if (cyc.grade.includes("优质")) {
+    txt = "GOOD";    bgColor = "#22c55e"; fontColor = "#ffffff";
+  } else if (cyc.grade.includes("普通")) {
+    txt = "NORMAL";  bgColor = "#eab308"; fontColor = "#1a1a1a";
+  } else {
+    txt = "BAD";     bgColor = "#ef4444"; fontColor = "#ffffff";
+  }
 
-const firstIndex=
-rows.findIndex(
-r=>+r.day===1
-);
+  const i    = cyc.startIdx;
+  const isIn = cyc.phase === "IN";
+  // 标签锚定在图表顶部/底部固定位置（leftMax/leftMin 在 render 顶部已计算）
+  const yPos = isIn ? leftMax - 100 : leftMin + 100;
+  // 数据点的实际 y 值（用于引导线终点）
+  const yDataPoint = rows[i].otc !== "" ? +rows[i].otc : yPos;
 
-const phaseType=
-(rows[firstIndex]?.phase||"")
-.toUpperCase();
-
-let yPos=
-phaseType==="OUT"
-?1700
-:1900;
-if(firstIndex>=0){
-
-let txt="Bad";
-let markColor="#ff4d4f";
-
-if(q.grade.includes("优质")){
- txt="Good";
- markColor="#00d26a";
-}
-
-if(q.grade.includes("普通")){
- txt="Normal";
- markColor="#e6b422";
-}
-qualityMark.push({
-
-id:"qualityMark",
-
-type:"scatter",
-
-z:9999,
-
-symbol:"roundRect",
-
-symbolSize:[64,28],
-
-data:[[
-firstIndex,
-yPos
-]],
-
-label:{
-
-show:true,
-
-formatter:txt,
-
-fontSize:15,
-
-fontWeight:"bold",
-
-color:"#fff"
-
-},
-
-itemStyle:{
-
-color:markColor,
-
-borderRadius:8,
-
-shadowBlur:15,
-
-shadowColor:markColor
-
-}
-
-})
-
-}
-
-  /* tooltip formatter */
+  qualityMark.push({
+    id: "qmark_" + idx,
+    type: "scatter",
+    yAxisIndex: 0,
+    z: 9999,
+    symbol: "rect",
+    symbolSize: [54, 20],
+    data: [[i, yPos]],
+    label: {
+      show: true,
+      formatter: txt,
+      color: fontColor,
+      fontSize: 11,
+      fontWeight: "bold",
+      fontFamily: "'Share Tech Mono', monospace"
+    },
+    itemStyle: {
+      color: bgColor,
+      borderColor: bgColor,
+      borderWidth: 1,
+      shadowBlur: 8,
+      shadowColor: bgColor + "aa"
+    },
+    // 从标签到数据点的虚线引导
+    markLine: {
+      silent: true,
+      symbol: ["none", "circle"],
+      symbolSize: 6,
+      animation: false,
+      data: [[
+        { coord: [i, yPos], lineStyle: { color: bgColor, type: "dashed", width: 1, opacity: 0.5 } },
+        { coord: [i, yDataPoint] }
+      ]],
+      label: { show: false }
+    },
+    tooltip: {
+      formatter: () => {
+        const sd = rows[cyc.startIdx]?.date || "";
+        const ed = rows[cyc.endIdx]?.date   || "";
+        return `<b style="color:${bgColor}">${cyc.grade}</b><br/>
+                <span style="color:#888;font-size:11px">${sd} ~ ${ed}</span><br/>
+                <span style="color:#aaa">${cyc.reason}</span>`;
+      }
+    }
+  });
+});  /* tooltip formatter */
 function fmt(params){
 
 if(!params.length)return ""
@@ -1253,7 +1088,11 @@ d=>d===axisDate
 )
 
 if(i===-1)return ""
-
+// 第3步：查找当前数据点所属的周期，取该周期的质量
+const currentCycle = cycles.find(c => i >= c.startIdx && i <= c.endIdx);
+const q = currentCycle
+  ? { grade: currentCycle.grade, reason: currentCycle.reason }
+  : { grade: "🟡普通", reason: "" };
 const ph=
 phase[i]==="IN"
 ?
@@ -1358,11 +1197,11 @@ ${q.reason}
       axisLine:  { lineStyle:{ color:"#1e3352" } },
       splitLine: { show:true, lineStyle:{ color:"#1a2e48", type:"dashed" } }
     },
-    yAxis: [
+yAxis: [
       {
         name: "场外指数",
         nameTextStyle: { color:C.otc, fontSize:12, padding:[0,0,0,8] },
-        min:-350, max:2150, interval:500,
+        min: leftMin, max: leftMax, interval: 500,
         axisLabel: { color:C.otc, fontFamily:"'Share Tech Mono',monospace", fontSize:11 },
         axisLine:  { lineStyle:{ color:"#1e3352" } },
         splitLine: { lineStyle:{ color:"#1a2e48" } }
@@ -1370,105 +1209,80 @@ ${q.reason}
       {
         name: "爆破指数",
         nameTextStyle: { color:C.blast, fontSize:12, padding:[0,8,0,0] },
-        min:-70, max:430, interval:100,
+        min: rightMin, max: rightMax, interval: 100,
         axisLabel: { color:C.blast, fontFamily:"'Share Tech Mono',monospace", fontSize:11 },
         axisLine:  { lineStyle:{ color:"#1e3352" } },
         splitLine: { show:false }
       }
-    ],
-    // FIX 2+3: ref lines via markLine on empty scatter,
+    ],    // FIX 2+3: ref lines via markLine on empty scatter,
     //          all data series rebuilt fresh (notMerge=true below)
 dataZoom: [
-{
-type:'inside',
-
-xAxisIndex:0,
-
-zoomOnMouseWheel:'shift',
-
-moveOnMouseMove:false,
-
-moveOnMouseWheel:false
-
-},
-{
-type:'slider',
-
-xAxisIndex:0,
-
-height:24,
-
-bottom:30,
-
-start:0,
-
-end:100,
-
-realtime:false,
-
-borderColor:"#1e3352",
-
-backgroundColor:"#0f1a2e",
-
-fillerColor:"rgba(56,200,255,.25)",
-
-emphasis:{
-
-handleStyle:{
-
-color:"#5ad1ff",
-
-borderColor:"#5ad1ff",
-
-shadowBlur:14,
-
-shadowColor:"rgba(90,209,255,.6)"
-
-},
-
-fillerColor:"rgba(56,200,255,.35)"
-
-},
-
-dataBackground:{
-
-lineStyle:{
-
-color:"#2a4a6e",
-
-width:1
-
-},
-
-areaStyle:{
-
-color:"rgba(56,200,255,.07)"
-
-}
-
-},
-
-handleSize:16,
-
-handleStyle:{
-
-color:"#38c8ff",
-
-borderColor:"#38c8ff",
-
-borderWidth:2,
-
-shadowBlur:8,
-
-shadowColor:"rgba(56,200,255,.5)"
-
-},
-
-moveHandleSize:0,
-
-showDetail:false
-
-}
+  // ① 鼠标交互：滚轮直接缩放、拖动平移（TradingView 风格）
+  {
+    type: 'inside',
+    xAxisIndex: 0,
+    zoomOnMouseWheel: true,        // 直接滚轮缩放（不需要按 Shift）
+    moveOnMouseMove: true,         // 鼠标按住拖动 → 平移
+    moveOnMouseWheel: false,
+    preventDefaultMouseMove: false,
+    throttle: 50,
+    zoomLock: false
+  },
+  // ② 底部 mini-slider：更细的导航条
+  {
+    type: 'slider',
+    xAxisIndex: 0,
+    height: 18,
+    bottom: 38,
+    start: 0,
+    end: 100,
+    realtime: true,
+    borderColor: "transparent",
+    backgroundColor: "rgba(15,26,46,0.4)",
+    fillerColor: "rgba(56,200,255,0.12)",
+    selectedDataBackground: {
+      lineStyle: { color: "#38c8ff", width: 1.2, opacity: 0.6 },
+      areaStyle: { color: "rgba(56,200,255,0.15)" }
+    },
+    dataBackground: {
+      lineStyle: { color: "#2a4a6e", width: 1, opacity: 0.5 },
+      areaStyle: { color: "rgba(56,200,255,0.04)" }
+    },
+    handleIcon: 'path://M-9.35,34.56V42m0-40V9.5m-2,0h4a2,2,0,0,1,2,2v21a2,2,0,0,1-2,2h-4a2,2,0,0,1-2-2v-21A2,2,0,0,1-11.35,9.5Z',
+    handleSize: '110%',
+    handleStyle: {
+      color: "#38c8ff",
+      borderColor: "#5ad1ff",
+      borderWidth: 1,
+      shadowBlur: 6,
+      shadowColor: "rgba(56,200,255,0.6)"
+    },
+    moveHandleSize: 5,
+    moveHandleStyle: {
+      color: "rgba(56,200,255,0.5)",
+      opacity: 0.8
+    },
+    emphasis: {
+      handleStyle: {
+        borderColor: "#fff",
+        shadowBlur: 12,
+        shadowColor: "rgba(56,200,255,0.9)"
+      },
+      moveHandleStyle: { color: "#5ad1ff", opacity: 1 }
+    },
+    showDetail: true,
+    labelFormatter: function(value, valueStr) {
+      // 显示日期标签
+      if (typeof valueStr === 'string' && valueStr.length >= 10) return valueStr.slice(2);
+      return valueStr || '';
+    },
+    textStyle: {
+      color: "#38c8ff",
+      fontFamily: "'Share Tech Mono', monospace",
+      fontSize: 10
+    },
+    brushSelect: false
+  }
 ],
 series:[
 ...refLineSeries(),
@@ -1655,6 +1469,10 @@ const FALLBACK_CSV = `date,symbol,group,otc,blast,phase,day,near
 async function init() {
   chart = echarts.init(document.getElementById("chart"), null, { renderer:"canvas" });
   window.addEventListener("resize", () => chart.resize());
+// 双击图表区域 → 重置缩放到完整范围（TradingView 风格）
+chart.getZr().on("dblclick", () => {
+  chart.dispatchAction({ type: "dataZoom", start: 0, end: 100 });
+});
 
   try {
     await loadSheet();
